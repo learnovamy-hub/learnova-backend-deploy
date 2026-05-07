@@ -7,6 +7,7 @@ const router = express.Router();
 const LANGUAGE_CONFIG = {
   en: { tts_lang: 'en-US', suffix: 'Always respond in English.' },
   ms: { tts_lang: 'ms-MY', suffix: 'Sentiasa balas dalam Bahasa Malaysia yang mudah dan jelas.' },
+  bm: { tts_lang: 'ms-MY', suffix: 'Sentiasa balas dalam Bahasa Malaysia yang mudah dan jelas.' },
   zh: { tts_lang: 'zh-CN', suffix: '始终用简体中文回答。使用清晰、简单的语言。' },
   ta: { tts_lang: 'ta-IN', suffix: 'எப்போதும் தமிழில் பதில் சொல்லுங்கள்.' },
 };
@@ -245,24 +246,26 @@ router.post('/session', async (req, res) => {
       ? '\nYou are teaching Standard ' + currentStandard.code + ': ' + currentStandard.description + '\nThis is standard ' + (segment + 1) + ' of ' + totalStandards + ' for this topic.'
       : '';
 
-    const system = 'You are a warm SPM ' + subject + ' tutor teaching "' + topic + '".\n'
+    const system = 'You are a warm, friendly SPM ' + subject + ' tutor guiding a student through “' + topic + '”.\n'
       + standardContext
-      + '\nSTRICT RULES:\n'
-      + '- Teach ONLY ONE concept per response (the standard above)\n'
-      + '- Maximum 200 words\n'
-      + '- End with exactly ONE check-in question e.g. "Does that make sense?" or "Faham?" or "Any questions?"\n'
-      + '- Do NOT give practice questions\n'
-      + '- Do NOT list multiple concepts\n'
-      + '- Be conversational and encouraging\n'
-      + '- If teaching a standard, start with: "ðŸ“Œ Standard ' + (currentStandard ? currentStandard.code : '') + '"';
+      + '\nCRITICAL RULES — follow exactly:\n'
+      + '- The student already sees a VISUAL ANIMATION on their screen showing the concept step by step. DO NOT re-explain the visual content.\n'
+      + '- Your role is CONVERSATION GUIDE only: ask questions, check understanding, give encouragement, nudge thinking.\n'
+      + '- Maximum 2-3 short sentences per reply. Never more.\n'
+      + '- NO bullet points. NO numbered lists. NO headers. NO markdown. Plain conversational sentences only.\n'
+      + '- Always end with exactly ONE short question to the student.\n'
+      + '- Do NOT dump full explanations. Do NOT list rules or steps.\n'
+      + '- Be warm and encouraging like a friendly tutor sitting next to the student.\n'
+      + (currentStandard ? '- This reply is about Standard ' + currentStandard.code + ': ' + currentStandard.description + '\n' : '')
+      + langConfig.suffix;
 
-    const userMsg = currentChunk
-      ? 'Teach this concept to the student:\n' + currentChunk + '\n\nStudent said: ' + message
-      : 'Student said: ' + message + '\n\nContinue teaching ' + topic + ' in ' + subject + '. Segment ' + segment + '.';
+    const userMsg = currentStandard
+      ? 'The student can see the visual animation for Standard ' + currentStandard.code + ': “' + currentStandard.description + '”. Student said: ' + message + '\n\nRespond conversationally in 2-3 sentences max. End with one question.'
+      : 'Student said: ' + message + '\n\nRespond conversationally in 2-3 sentences max. End with one question.';
 
     const msgs = history.slice(-4).concat([{ role: 'user', content: userMsg }]);
     const r = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5', max_tokens: 400, system: system, messages: msgs
+      model: 'claude-sonnet-4-5', max_tokens: 200, system: system, messages: msgs
     });
 
     const reply = r.content[0].text.trim();
