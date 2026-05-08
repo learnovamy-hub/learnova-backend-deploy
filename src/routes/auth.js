@@ -157,12 +157,36 @@ router.post(
 
       const latestResumeState = await getResumeState(user.id, user.role);
 
+      // Fetch form_level for students
+      let formLevel = null;
+      if (user.role === 'student') {
+        try {
+          const { supabase } = await import('../config/database.js');
+          // Try user_id column first, fall back to id column
+          let { data: studentRow } = await supabase
+            .from('students')
+            .select('form_level')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (!studentRow) {
+            const { data: byId } = await supabase
+              .from('students')
+              .select('form_level')
+              .eq('id', user.id)
+              .maybeSingle();
+            studentRow = byId;
+          }
+          formLevel = studentRow?.form_level ?? null;
+        } catch (_) { /* non-fatal */ }
+      }
+
       res.json({
         message: loginMeta.isFirstLogin ? 'Welcome to Learnova!' : 'Welcome back!',
         token,
         is_first_login: loginMeta.isFirstLogin,
         login_count: loginMeta.loginCount,
         resume_state: latestResumeState,
+        form_level: formLevel,
         user: {
           id: user.id,
           email: user.email,
@@ -238,6 +262,39 @@ router.get('/teacher-profile', authMiddleware, async (req, res) => {
     res.json({ teacher });
   } catch (error) {
     console.error('Get teacher profile error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/auth/update-form
+ * Save the student's form level (persists across devices/browsers)
+ */
+router.patch('/update-form', authMiddleware, async (req, res) => {
+  try {
+    const { form_level } = req.body;
+    if (!form_level) return res.status(400).json({ error: 'form_level required' });
+
+    const { supabase } = await import('../config/database.js');
+
+    // Try updating by user_id first
+    let { error } = await supabase
+      .from('students')
+      .update({ form_level })
+      .eq('user_id', req.user.userId);
+
+    // Fall back to id column if user_id row not found/updated
+    if (error) {
+      const { error: err2 } = await supabase
+        .from('students')
+        .update({ form_level })
+        .eq('id', req.user.userId);
+      if (err2) throw err2;
+    }
+
+    res.json({ ok: true, form_level });
+  } catch (error) {
+    console.error('update-form error:', error);
     res.status(500).json({ error: error.message });
   }
 });
