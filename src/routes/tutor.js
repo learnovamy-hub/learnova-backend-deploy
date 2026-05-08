@@ -51,13 +51,46 @@ async function getAllTopicsForSubject(subject) {
 
 // Fetch learning standards for a topic
 async function getLearningStandards(subject, topic) {
-  const { data } = await supabase
+  // First try: full topic string as substring
+  const { data: direct } = await supabase
     .from('learning_standards')
     .select('code, description, subtopic_num')
     .eq('subject', subject)
     .ilike('topic', '%' + topic + '%')
     .order('code', { ascending: true });
-  return data || [];
+  if (direct && direct.length > 0) return direct;
+
+  // Fallback: DB topic is a substring of the lesson topic (reverse match)
+  // e.g. lesson="Applications of Quadratic Functions", DB topic="Quadratic Functions"
+  // Try each 2-word window from the topic
+  const words = topic.split(/\s+/).filter(w => w.length >= 4);
+  const stopWords = new Set(['with','that','this','from','into','also','some','have','been','will','which']);
+  const keywords = words.filter(w => !stopWords.has(w.toLowerCase()));
+
+  for (let i = 0; i < keywords.length - 1; i++) {
+    const pair = keywords[i] + ' ' + keywords[i + 1];
+    const { data: byPair } = await supabase
+      .from('learning_standards')
+      .select('code, description, subtopic_num')
+      .eq('subject', subject)
+      .ilike('topic', '%' + pair + '%')
+      .order('code', { ascending: true });
+    if (byPair && byPair.length > 0) return byPair;
+  }
+
+  // Last resort: single most distinctive keyword (longest word)
+  const longest = keywords.sort((a, b) => b.length - a.length)[0];
+  if (longest) {
+    const { data: byWord } = await supabase
+      .from('learning_standards')
+      .select('code, description, subtopic_num')
+      .eq('subject', subject)
+      .ilike('topic', '%' + longest + '%')
+      .order('code', { ascending: true });
+    if (byWord && byWord.length > 0) return byWord;
+  }
+
+  return [];
 }
 
 // Get a single standard by segment index
@@ -117,7 +150,7 @@ router.post('/session', async (req, res) => {
       const switchTarget = await detectTopicSwitch(message, topic, subject);
       if (switchTarget) {
         return res.json({
-          reply: 'I see you want to study **' + switchTarget.topic + '** â€” great initiative! Your teacher taught this today? ðŸ‘\n\nShall we switch to that topic now?',
+          reply: 'I see you want to study **' + switchTarget.topic + '**  -  great initiative! Your teacher taught this today? \n\nShall we switch to that topic now?',
           phase: phase, segment: segment, isCheckIn: false, activeQuestion: null,
           topicSwitchSuggested: true, suggestedTopic: switchTarget.topic, suggestedTopicId: switchTarget.id,
           suggestedResponses: ['Yes, switch to ' + switchTarget.topic + '!', 'No, continue current topic'],
@@ -145,7 +178,7 @@ router.post('/session', async (req, res) => {
 
       const standardsList = standards.length > 0
         ? '\n\nIn this topic you will master ' + totalStandards + ' learning standards:\n' +
-          standards.slice(0, 5).map(function(s) { return 'â€¢ ' + s.code + ': ' + s.description.substring(0, 60) + '...'; }).join('\n') +
+          standards.slice(0, 5).map(function(s) { return '- ' + s.code + ': ' + s.description.substring(0, 60) + '...'; }).join('\n') +
           (standards.length > 5 ? '\n...and ' + (standards.length - 5) + ' more.' : '')
         : '';
 
@@ -167,7 +200,7 @@ router.post('/session', async (req, res) => {
         standardDesc: standards.length > 0 ? standards[0].description : null,
         standardsProgress: standards.length > 0 ? 'Standard ' + standards[0].code + ' (1 of ' + totalStandards + ')' : null,
         totalStandards: totalStandards,
-        suggestedResponses: ["Yes, I'm ready! Let's start ðŸš€", 'Tell me more first', 'I have a question...']
+        suggestedResponses: ["Yes, I'm ready! Let's start", 'Tell me more first', 'I have a question...']
       });
     }
 
@@ -180,21 +213,21 @@ router.post('/session', async (req, res) => {
 
       if (correct) {
         const nextMsg = nextStandard
-          ? '\n\nNext up: **Standard ' + nextStandard.code + '** â€” ' + nextStandard.description.substring(0, 60) + '...'
-          : '\n\nYou\'ve covered all the standards for this topic! ðŸŽ‰';
+          ? '\n\nNext up: **Standard ' + nextStandard.code + '**  -  ' + nextStandard.description.substring(0, 60) + '...'
+          : '\n\nYou\'ve covered all the standards for this topic! ';
         return res.json({
-          reply: 'âœ… Correct! Well done!\n\n' + (q.explanation || 'Great work!') + nextMsg,
+          reply: 'Correct! Well done!\n\n' + (q.explanation || 'Great work!') + nextMsg,
           phase: 'concept', segment: segment + 1, isCheckIn: false, activeQuestion: null,
           topicSwitchSuggested: false,
           standardCode: nextStandard ? nextStandard.code : null,
           standardDesc: nextStandard ? nextStandard.description : null,
           standardsProgress: nextStandard ? 'Standard ' + nextStandard.code + ' (' + (segment + 2) + ' of ' + totalStandards + ')' : 'Topic Complete!',
-          suggestedResponses: ['Continue! ðŸ‘', 'I have a question...', 'Give me another question!']
+          suggestedResponses: ['Continue!', 'I have a question...', 'Give me another question!']
         });
       }
 
       return res.json({
-        reply: 'Not quite â€” the correct answer is **' + q.correct_answer + '**\n\n' + (q.explanation || 'Review this concept.') + '\n\nShall we continue?',
+        reply: 'Not quite  -  the correct answer is **' + q.correct_answer + '**\n\n' + (q.explanation || 'Review this concept.') + '\n\nShall we continue?',
         phase: 'concept', segment: segment + 1, isCheckIn: false, activeQuestion: null,
         topicSwitchSuggested: false,
         standardCode: currentStandard ? currentStandard.code : null,
@@ -220,7 +253,7 @@ router.post('/session', async (req, res) => {
         }
         const standardTag = currentStandard ? '\n\n_Testing: Standard ' + currentStandard.code + '_' : '';
         return res.json({
-          reply: 'ðŸ“ **Practice Question:**\n\n' + q.question + '\n\n' + opts + '\n\nType A, B, C or D â€” or use the workspace!' + standardTag,
+          reply: '**Practice Question:**\n\n' + q.question + '\n\n' + opts + '\n\nType A, B, C or D  -  or use the workspace!' + standardTag,
           phase: 'quiz_answer', segment: segment, isCheckIn: false, activeQuestion: q,
           topicSwitchSuggested: false,
           standardCode: currentStandard ? currentStandard.code : null,
@@ -230,7 +263,7 @@ router.post('/session', async (req, res) => {
         });
       }
       return res.json({
-        reply: "No practice questions yet for this topic â€” let's continue the lesson!",
+        reply: "No practice questions yet for this topic  -  let's continue the lesson!",
         phase: 'concept', segment: segment, isCheckIn: false, activeQuestion: null,
         topicSwitchSuggested: false, standardCode: null, standardDesc: null, standardsProgress: standardsProgress,
         suggestedResponses: ['Continue the lesson', 'I have a question...']
@@ -252,7 +285,7 @@ router.post('/session', async (req, res) => {
       + '- The student already sees a VISUAL ANIMATION on their screen showing the concept step by step. DO NOT re-explain the visual content.\n'
       + '- Your role is CONVERSATION GUIDE only: ask questions, check understanding, give encouragement, nudge thinking.\n'
       + '- Maximum 2-3 short sentences per reply. Never more.\n'
-      + '- NO bullet points. NO numbered lists. NO headers. NO markdown. Plain conversational sentences only.\n'
+      + '- NO bullet points. NO numbered lists. NO headers. NO markdown. NO emojis. NO special symbols. Plain conversational sentences only.\n'
       + '- Always end with exactly ONE short question to the student.\n'
       + '- Do NOT dump full explanations. Do NOT list rules or steps.\n'
       + '- Be warm and encouraging like a friendly tutor sitting next to the student.\n'
@@ -268,7 +301,13 @@ router.post('/session', async (req, res) => {
       model: 'claude-sonnet-4-5', max_tokens: 200, system: system, messages: msgs
     });
 
-    const reply = r.content[0].text.trim();
+    const reply = r.content[0].text
+      .trim()
+      .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')   // remove emoji (supplementary plane)
+      .replace(/[\u{2600}-\u{27BF}]/gu, '')       // remove misc symbols & dingbats
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')     // remove more emoji ranges
+      .replace(/\s{2,}/g, ' ')                    // collapse double spaces left behind
+      .trim();
     const rl = reply.toLowerCase();
     const isCheckIn = rl.includes('faham') || rl.includes('make sense') ||
       rl.includes('any questions') || rl.includes('understand') ||
@@ -286,8 +325,8 @@ router.post('/session', async (req, res) => {
       standardsProgress: standardsProgress,
       totalStandards: totalStandards,
       suggestedResponses: isCheckIn
-        ? ['Yes, I understand! Continue ðŸ‘', 'I have a question...', 'Explain again please', 'Give me a practice question! ðŸ“']
-        : ['Continue please!', 'I have a question...', 'Give me a practice question! ðŸ“']
+        ? ['Yes, I understand! Continue', 'I have a question...', 'Explain again please', 'Give me a practice question!']
+        : ['Continue please!', 'I have a question...', 'Give me a practice question!']
     });
 
   } catch (err) {
