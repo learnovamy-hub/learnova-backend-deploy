@@ -20,8 +20,12 @@ import adminRoutes from './routes/admin.js';
 import workspaceRoutes from './routes/workspace.js';
 import welcomeRoutes from './routes/welcome.js';
 import sessionQuizRoutes from './routes/session_quiz.js';
+import quizSessionRoutes from './routes/quiz.js';
 import animationRoutes from './routes/animations.js';
+import topicAnimationRoutes from './routes/topicAnimations.js';
 import ttsRoutes from './routes/tts.js';
+import homeRoutes from './routes/home.js';
+import paymentRoutes from './routes/payment.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +42,9 @@ app.use(cors({
   credentials: false
 }));
 app.options('*', cors());
+
+// Stripe webhook needs raw body — register BEFORE json middleware
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 
 // Body parser
 app.use(express.json());
@@ -80,8 +87,12 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/workspace', workspaceRoutes);
 app.use('/api/tutor/welcome', welcomeRoutes);
 app.use('/api/session-quiz', sessionQuizRoutes);
+app.use('/api/quiz', quizSessionRoutes);
 app.use('/api/animations', animationRoutes);
+app.use('/api/topic-animations', topicAnimationRoutes);
 app.use('/api/tts', ttsRoutes);
+app.use('/api/home', homeRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // ============================================================================
 // 404 HANDLER
