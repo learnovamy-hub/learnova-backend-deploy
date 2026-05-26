@@ -121,8 +121,8 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`âœ… Learnova Backend running on port ${PORT}`);
-  console.log(`ðŸ“¡ Health check: http://localhost:${PORT}/health`);
-  console.log(`ðŸ” API: http://localhost:${PORT}/api`);
+  console.log(`ðŸ"¡ Health check: http://localhost:${PORT}/health`);
+  console.log(`ðŸ" API: http://localhost:${PORT}/api`);
 });
 
 export default app;

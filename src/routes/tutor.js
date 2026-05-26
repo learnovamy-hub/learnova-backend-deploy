@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import { getConversationLimit } from '../utils/conversation_limiter.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from '../config/database.js';
@@ -427,12 +427,12 @@ function selectTeachingStrategy(pedagogyTypes) {
 
 const VISUAL_TYPES = {
   // topic keyword -> preferred visual type
-  ‘trigonometry’: ‘graph’, ‘sine’: ‘graph’, ‘cosine’: ‘graph’, ‘tangent’: ‘graph’,
-  ‘graph’: ‘graph’, ‘function’: ‘graph’, ‘curve’: ‘graph’, ‘linear’: ‘graph’,
-  ‘quadratic’: ‘graph’, ‘exponential’: ‘graph’, ‘logarithm’: ‘graph’,
-  ‘matrix’: ‘math_working’, ‘matrices’: ‘math_working’, ‘simultaneous’: ‘math_working’,
-  ‘variation’: ‘math_working’, ‘inverse’: ‘math_working’, ‘proof’: ‘math_working’,
-  ‘probability’: ‘chart’, ‘distribution’: ‘chart’, ‘statistics’: ‘chart’, ‘data’: ‘chart’,
+  'trigonometry': 'graph', 'sine': 'graph', 'cosine': 'graph', 'tangent': 'graph',
+  'graph': 'graph', 'function': 'graph', 'curve': 'graph', 'linear': 'graph',
+  'quadratic': 'graph', 'exponential': 'graph', 'logarithm': 'graph',
+  'matrix': 'math_working', 'matrices': 'math_working', 'simultaneous': 'math_working',
+  'variation': 'math_working', 'inverse': 'math_working', 'proof': 'math_working',
+  'probability': 'chart', 'distribution': 'chart', 'statistics': 'chart', 'data': 'chart',
 };
 
 function guessVisualType(topic) {
@@ -534,7 +534,7 @@ function _legacyBuildPrompt({ role, subject, topic, standardContext,
 
   // â"€â"€ Layer 2: Personality (tone, pace, interaction style) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   if (personality?.rules?.prompt_style) {
-    lines.push('\nPERSONALITY â€" ' + (personality.display_name || personality.name).toUpperCase() + ':');
+    lines.push('\nPERSONALITY -- ' + (personality.display_name || personality.name).toUpperCase() + ':');
     lines.push(personality.rules.prompt_style);
   }
 
@@ -543,12 +543,12 @@ function _legacyBuildPrompt({ role, subject, topic, standardContext,
 
   // â"€â"€ Layer 4: Topic-Specific Pedagogy Intelligence â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   if (pj) {
-    lines.push('\n\nTEACHING PROTOCOL â€" ' + topic.toUpperCase() + ' (from real SPM teacher):');
+    lines.push('\n\nTEACHING PROTOCOL -- ' + topic.toUpperCase() + ' (from real SPM teacher):');
 
     if (pj.opening_hook) lines.push('OPENING HOOK: ' + pj.opening_hook);
 
     if (pj.lesson_flow && pj.lesson_flow.length) {
-      lines.push('LESSON FLOW: ' + pj.lesson_flow.join(' â†’ '));
+      lines.push('LESSON FLOW: ' + pj.lesson_flow.join(' -> '));
     }
 
     if (pj.teaching_phases && pj.teaching_phases.length) {
@@ -581,19 +581,19 @@ function _legacyBuildPrompt({ role, subject, topic, standardContext,
 
   // â"€â"€ Layer 5: Memory Anchors â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   if (anchors && anchors.length > 0) {
-    lines.push('\nMEMORY ANCHORS â€" USE THESE in your explanations:');
+    lines.push('\nMEMORY ANCHORS -- USE THESE in your explanations:');
     anchors.forEach(function(a) {
       const variants = a.student_variants && a.student_variants.length
         ? ' (student versions: ' + a.student_variants.join(', ') + ')' : '';
-      lines.push('  "' + a.anchor + '" â†’ ' + a.purpose + variants);
+      lines.push('  "' + a.anchor + '" -> ' + a.purpose + variants);
     });
   }
 
   // â"€â"€ Layer 6: Misconception Warnings â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   if (misconceptions && misconceptions.length > 0) {
-    lines.push('\nCOMMON MISTAKES â€" watch for these and correct proactively:');
+    lines.push('\nCOMMON MISTAKES -- watch for these and correct proactively:');
     misconceptions.forEach(function(m) {
-      lines.push('  [' + (m.severity || 'medium') + '] "' + m.mistake + '" â†’ ' + m.correction);
+      lines.push('  [' + (m.severity || 'medium') + '] "' + m.mistake + '" -> ' + m.correction);
     });
   }
 
@@ -696,7 +696,7 @@ function getStandardForSegment(standards, segment) {
 
 // â"€â"€â"€ Tutor Cache Layer â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 // Zero-cost responses for predictable student intents (~70% of all messages).
-// Rule-based classifier â€" no API call needed. Cache hit = no Claude cost.
+// Rule-based classifier -- no API call needed. Cache hit = no Claude cost.
 
 const INTENT_PATTERNS = {
   affirmative: [
@@ -721,7 +721,7 @@ const INTENT_PATTERNS = {
 
 /**
  * Classify student message into a cache intent. Returns null for freeform.
- * Zero API cost â€" pure string matching.
+ * Zero API cost -- pure string matching.
  */
 function classifyStudentIntent(message) {
   if (!message || message === 'start') return null;
@@ -729,7 +729,7 @@ function classifyStudentIntent(message) {
   for (const [intent, patterns] of Object.entries(INTENT_PATTERNS)) {
     if (patterns.some(p => p.test(msg))) return intent;
   }
-  return null; // freeform â€" needs Claude
+  return null; // freeform -- needs Claude
 }
 
 /**
@@ -753,7 +753,7 @@ async function lookupCache(subject, topic, phase, intent, language) {
 
 /**
  * Save a Claude response to cache for future reuse.
- * Silently fails â€" never blocks the response.
+ * Silently fails -- never blocks the response.
  */
 async function saveToCache(subject, topic, phase, intent, language, reply, visual, suggestedResponses, isCheckIn) {
   try {
@@ -1133,22 +1133,22 @@ router.post('/session', async (req, res) => {
     let system, userMsg;
 
     if (studentConfused) {
-      // Confusion protocol â€" fresh angle, use a memory anchor or analogy
+      // Confusion protocol -- fresh angle, use a memory anchor or analogy
       system = withCharacter(buildMasterSystemPrompt({
         role: 'a patient SPM ' + subject + ' tutor. The student is confused about "' + topic + '"',
         subject, topic, standardContext,
         pedagogy: pedagogyResult, anchors, misconceptions, personality: effectivePersonality,
         teachingStrategy, language: effectiveLanguage,
         pedagogySample,
-      }), charProfile) + '\n\nCONFUSION PROTOCOL â€" FOLLOW EXACTLY:\n'
+      }), charProfile) + '\n\nCONFUSION PROTOCOL -- FOLLOW EXACTLY:\n'
         + '1. Do NOT repeat the previous explanation.\n'
         + '2. Choose ONE fresh strategy: use a memory anchor from MEMORY ANCHORS above, try a real-world analogy, or break the concept into the single smallest possible step.\n'
-        + '3. Extremely simple language â€" as if explaining to a 12-year-old.\n'
+        + '3. Extremely simple language -- as if explaining to a 12-year-old.\n'
         + '4. Maximum 2 sentences, then ONE simple yes/no or either/or question.\n'
         + '5. Do not mention they were confused. Pivot naturally.';
 
       userMsg = 'Student is confused and said: "' + correctedMsg + '"\n\n'
-        + 'Use a completely fresh angle â€" try a memory anchor, analogy, or the smallest possible step from the TEACHING PROTOCOL. 2 sentences max, then one simple question.';
+        + 'Use a completely fresh angle -- try a memory anchor, analogy, or the smallest possible step from the TEACHING PROTOCOL. 2 sentences max, then one simple question.';
     } else {
       system = withCharacter(buildMasterSystemPrompt({
         role: 'a warm, friendly SPM ' + subject + ' tutor guiding a student through "' + topic + '"',
@@ -1198,11 +1198,11 @@ router.post('/session', async (req, res) => {
     // Sanitize history for Anthropic: must start with 'user', no consecutive same roles,
     // and remove trailing user message (current student input is sent separately as userMsg).
     let safeHistory = history.slice(-6);
-    // Drop trailing user message â€" we send student input via userMsg below
+    // Drop trailing user message -- we send student input via userMsg below
     if (safeHistory.length > 0 && safeHistory[safeHistory.length - 1].role === 'user') {
       safeHistory = safeHistory.slice(0, -1);
     }
-    // Drop leading assistant messages â€" Anthropic requires first message to be 'user'
+    // Drop leading assistant messages -- Anthropic requires first message to be 'user'
     while (safeHistory.length > 0 && safeHistory[0].role !== 'user') {
       safeHistory.shift();
     }
