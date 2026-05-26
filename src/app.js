@@ -26,6 +26,7 @@ import topicAnimationRoutes from './routes/topicAnimations.js';
 import ttsRoutes from './routes/tts.js';
 import homeRoutes from './routes/home.js';
 import paymentRoutes from './routes/payment.js';
+import transcriptRoutes from './routes/transcript.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -93,6 +94,7 @@ app.use('/api/topic-animations', topicAnimationRoutes);
 app.use('/api/tts', ttsRoutes);
 app.use('/api/home', homeRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/transcript', transcriptRoutes);
 
 // ============================================================================
 // 404 HANDLER
