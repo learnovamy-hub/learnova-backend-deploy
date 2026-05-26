@@ -192,6 +192,36 @@ router.get('/payments', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/admin/bridge-coverage — multilingual snippet pre-generation coverage
+router.get('/bridge-coverage', adminAuthMiddleware, async (req, res) => {
+  try {
+    const [{ data: snippets }, { count: totalChunks }] = await Promise.all([
+      supabase.from('bridge_snippets').select('language_code, language_name, subject'),
+      supabase.from('concept_chunks').select('*', { count: 'exact', head: true }),
+    ]);
+
+    const byLang = {};
+    for (const s of (snippets || [])) {
+      byLang[s.language_code] = (byLang[s.language_code] || 0) + 1;
+    }
+    const total = snippets?.length || 0;
+    const expected = (totalChunks || 0) * 2; // Tamil + Mandarin
+
+    res.json({
+      total_concept_chunks: totalChunks || 0,
+      total_bridge_snippets: total,
+      coverage_percent: expected > 0 ? Math.round((total / expected) * 100) : 0,
+      by_language: {
+        tamil:    byLang['ta']  || 0,
+        mandarin: byLang['zh']  || 0,
+        cantonese:byLang['yue'] || 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function generateQuestions(subject, topicName) {
   const r = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
