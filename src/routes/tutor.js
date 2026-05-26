@@ -3,6 +3,8 @@ import { getConversationLimit } from '../utils/conversation_limiter.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from '../config/database.js';
 import { PedagogyEngine, buildMasterSystemPrompt, ResponseClassifier } from '../pedagogy/index.js';
+import { quickCorrectBM } from '../lib/bm_correction_engine.js';
+import { MultilingualBridgeEngine, BRIDGE_LANGUAGES } from '../services/MultilingualBridgeEngine.js';
 
 const router = express.Router();
 const LANGUAGE_TTS = {
@@ -40,10 +42,19 @@ function getEffectiveLanguage(subject, language, message) {
   return language || 'bm';
 }
 
+const ACTIVE_BRIDGE_LANGS = new Set(['ta', 'zh']);
+function detectBridgeLang(message, langParam) {
+  if (ACTIVE_BRIDGE_LANGS.has(langParam)) return langParam;
+  if (/\btamil\b/i.test(message)) return 'ta';
+  if (/\b(mandarin|chinese|cina)\b/i.test(message) || /华语/.test(message)) return 'zh';
+  return null;
+}
+
 const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 
 // Learnova Pedagogy Engine - initialised once, shared across all requests
 const pedagogyEngine = new PedagogyEngine(supabase);
+const bridgeEngine = new MultilingualBridgeEngine(supabase, anthropic);
 
 // ── Conversation logger (fire-and-forget, never blocks response) ─────────────
 async function logConversation({
@@ -820,6 +831,9 @@ router.post('/session', async (req, res) => {
 
     const effectiveSessionId = session_id || (student_id ? `${student_id}_${Date.now()}` : `anon_${Date.now()}`);
 
+    // Fix BM ASR transcription errors before passing to AI
+    const correctedMsg = message !== 'start' ? quickCorrectBM(message) : message;
+
     const effectiveLanguage = getEffectiveLanguage(subject, language, message);
     // No topic = general question, answer directly with DeepSeek
     if (!topic) {
@@ -1049,6 +1063,27 @@ router.post('/session', async (req, res) => {
       });
     }
 
+    // â"€â"€ MULTILINGUAL BRIDGE (Tamil/Mandarin native language support) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+    const bridgeLang = detectBridgeLang(correctedMsg, language);
+    if (bridgeLang && topic) {
+      console.log('[Bridge]', BRIDGE_LANGUAGES[bridgeLang]?.name, 'â†'', topic);
+      const bResult = await bridgeEngine.generateSnippet({
+        targetLanguage: bridgeLang, subject, topic,
+        conceptTitle: topic, currentExplanation: '', form: studentFormLevel,
+      });
+      if (bResult.success) {
+        return res.json({
+          reply: bResult.full_response, bridge_mode: true,
+          audio_url: bResult.audio_url || null, from_cache: bResult.from_cache,
+          phase: 'concept', segment, isCheckIn: false, activeQuestion: null,
+          topicSwitchSuggested: false,
+          standardCode: currentStandard?.code || null,
+          standardDesc: currentStandard?.description || null,
+          standardsProgress, suggestedResponses: ['Teruskan dalam BM', 'Saya ada soalan...'],
+        });
+      }
+    }
+
     // â"€â"€ DEEPSEEK ENRICHMENT ROUTING â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     // Only for enrichment/calculation — core teaching always uses Claude
     if (!studentConfused) {
@@ -1061,8 +1096,8 @@ router.post('/session', async (req, res) => {
         const dsCount = sessionId ? await getDeepSeekCount(sessionId) : DEEPSEEK_MAX_PER_SESSION;
 
         if (dsCount < DEEPSEEK_MAX_PER_SESSION) {
-          console.log('[Router] DeepSeek route:', classification.type);
-          const dsReply = await callDeepSeekEnrichment(subject, topic, studentFormLevel, history, message);
+          console.log('[Router] DeepSeek enrichment route:', classification.type);
+          const dsReply = await callDeepSeekEnrichment(subject, topic, studentFormLevel, history, correctedMsg);
 
           if (dsReply && dsReply.trim().length > 10) {
             if (sessionId) {
@@ -1112,7 +1147,7 @@ router.post('/session', async (req, res) => {
         + '4. Maximum 2 sentences, then ONE simple yes/no or either/or question.\n'
         + '5. Do not mention they were confused. Pivot naturally.';
 
-      userMsg = 'Student is confused and said: "' + message + '"\n\n'
+      userMsg = 'Student is confused and said: "' + correctedMsg + '"\n\n'
         + 'Use a completely fresh angle â€" try a memory anchor, analogy, or the smallest possible step from the TEACHING PROTOCOL. 2 sentences max, then one simple question.';
     } else {
       system = withCharacter(buildMasterSystemPrompt({
@@ -1124,10 +1159,10 @@ router.post('/session', async (req, res) => {
       }), charProfile) + '\nCONTEXT: The student already sees a VISUAL ANIMATION. DO NOT re-describe the animation. Your role: ask the CHECK-IN QUESTIONS from the TEACHING PROTOCOL, celebrate correct answers, correct mistakes using MISCONCEPTION guidance above.';
       const phaseInstruction = getPhaseInstruction(pedagogyResult, segment);
       userMsg = phaseInstruction
-        ? phaseInstruction + '\n\nStudent just said: ' + message + '\nDeliver your phase instruction now. Follow the rules strictly.'
+        ? phaseInstruction + '\n\nStudent just said: ' + correctedMsg + '\nDeliver your phase instruction now. Follow the rules strictly.'
         : (currentStandard
-            ? 'Standard ' + currentStandard.code + ' (' + currentStandard.description + '). Student said: ' + message + '\n\nGuide using TEACHING PROTOCOL. 2-3 sentences max, end with one question.'
-            : 'Student said: ' + message + '\n\nGuide using TEACHING PROTOCOL. 2-3 sentences max, end with one question.');
+            ? 'Standard ' + currentStandard.code + ' (' + currentStandard.description + '). Student said: ' + correctedMsg + '\n\nGuide using TEACHING PROTOCOL. 2-3 sentences max, end with one question.'
+            : 'Student said: ' + correctedMsg + '\n\nGuide using TEACHING PROTOCOL. 2-3 sentences max, end with one question.');
 
 
     }
