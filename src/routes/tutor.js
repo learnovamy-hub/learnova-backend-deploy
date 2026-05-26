@@ -1066,7 +1066,7 @@ router.post('/session', async (req, res) => {
     // â"€â"€ MULTILINGUAL BRIDGE (Tamil/Mandarin native language support) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     const bridgeLang = detectBridgeLang(correctedMsg, language);
     if (bridgeLang && topic) {
-      console.log('[Bridge]', BRIDGE_LANGUAGES[bridgeLang]?.name, 'â†'', topic);
+      console.log('[Bridge]', BRIDGE_LANGUAGES[bridgeLang]?.name, '->', topic);
       const bResult = await bridgeEngine.generateSnippet({
         targetLanguage: bridgeLang, subject, topic,
         conceptTitle: topic, currentExplanation: '', form: studentFormLevel,
