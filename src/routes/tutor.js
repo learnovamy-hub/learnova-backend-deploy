@@ -5,6 +5,7 @@ import { supabase } from '../config/database.js';
 import { PedagogyEngine, buildMasterSystemPrompt, ResponseClassifier } from '../pedagogy/index.js';
 import { quickCorrectBM } from '../lib/bm_correction_engine.js';
 import { MultilingualBridgeEngine, BRIDGE_LANGUAGES } from '../services/MultilingualBridgeEngine.js';
+import ID_PEDAGOGY_LAYERS, { classifyPedagogyNeeded } from '../services/IndonesianPedagogyEngine.js';
 
 const router = express.Router();
 const LANGUAGE_TTS = {
@@ -827,6 +828,7 @@ router.post('/session', async (req, res) => {
       pre_read = false,
       character = 'nova',
       student_name = '',
+      country = 'MY',
     } = req.body;
 
     const effectiveSessionId = session_id || (student_id ? `${student_id}_${Date.now()}` : `anon_${Date.now()}`);
@@ -1165,6 +1167,26 @@ router.post('/session', async (req, res) => {
             : 'Student said: ' + correctedMsg + '\n\nGuide using TEACHING PROTOCOL. 2-3 sentences max, end with one question.');
 
 
+    }
+
+    // -- Indonesian pedagogy layer (country=ID)
+    if (country === 'ID') {
+      const subjectKey = subject?.toLowerCase().replace(/\s+/g, '_');
+      const pedagogyMode = classifyPedagogyNeeded(subjectKey, topic, {
+        isNewTopic: message === 'start',
+        confused: studentConfused,
+        examMode: false,
+      });
+      const idLayer = ID_PEDAGOGY_LAYERS.subject_strategies[subjectKey]?.pedagogy_modes[pedagogyMode];
+      if (idLayer) {
+        system += '\n\n=== LEARNOVA ID PEDAGOGY: ' + (idLayer.learnova_method || pedagogyMode).toUpperCase() + ' ===\n'
+          + 'Metode: ' + (idLayer.learnova_method || pedagogyMode) + '\n'
+          + 'Pendekatan: ' + idLayer.description + '\n'
+          + 'Strategi: ' + (idLayer.approach || idLayer.rule || '');
+      }
+      const cultural = ID_PEDAGOGY_LAYERS.cultural_pedagogy;
+      system += '\n\nPola semangat yang diizinkan: '
+        + cultural.encouragement_patterns.slice(0, 3).join(' | ');
     }
 
     // â"€â"€ Cache check: try to serve from pre-stored responses first â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
