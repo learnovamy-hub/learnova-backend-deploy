@@ -29,6 +29,7 @@ router.post('/', async (req, res) => {
         model: 'tts-1',       // tts-1 = fast & cheap | tts-1-hd = higher quality
         input,
         voice,
+        speed: 0.85,          // slower = clearer for tutoring context
         response_format: 'mp3',
       }),
     });

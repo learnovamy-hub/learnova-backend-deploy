@@ -154,6 +154,7 @@ router.post('/submit', async (req, res) => {
       _notifyParent({
         parentEmail: student.parent_email,
         studentName: student.full_name,
+        studentId: student_id,
         subject,
         topic,
         score,
@@ -170,7 +171,7 @@ router.post('/submit', async (req, res) => {
   }
 });
 
-async function _notifyParent({ parentEmail, studentName, subject, topic, score, total, percentage, gradedAnswers }) {
+async function _notifyParent({ parentEmail, studentName, studentId, subject, topic, score, total, percentage, gradedAnswers }) {
   const weakAreas = gradedAnswers.filter(a => !a.correct).map(a => a.question).slice(0, 2);
   const weakText = weakAreas.length > 0 ? `Areas to review: ${weakAreas.join('; ')}` : 'Great performance across all questions!';
 
@@ -190,6 +191,7 @@ async function _notifyParent({ parentEmail, studentName, subject, topic, score, 
   await supabase.from('parent_notifications').insert([{
     parent_email: parentEmail,
     student_name: studentName,
+    student_id: studentId,
     subject,
     topic,
     score,

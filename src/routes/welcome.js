@@ -13,21 +13,21 @@ const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 // ── Seed common patterns on first run ────────────────────────────────────────
 const SEED_CACHE = [
   // Phase: greeting_response
-  { phase: 'greeting_response', pattern: 'great ready', tutor_reply: "Love that energy! That's exactly what I want to hear. Let's make today count!", quick_replies: ['Let\'s go!', 'What are we doing today?'], proceed: false },
-  { phase: 'greeting_response', pattern: 'good thanks', tutor_reply: "Glad to hear it! Consistency is the secret to acing SPM. Ready to keep that momentum going?", quick_replies: ['Yes, let\'s start!', 'Sure, what\'s first?'], proceed: false },
-  { phase: 'greeting_response', pattern: 'tired but here', tutor_reply: "Hey, the fact that you showed up even when tired? That's real dedication. We'll take it easy to start — just one concept at a time. Deal?", quick_replies: ['Deal, let\'s try', 'Okay, just a bit'], proceed: false },
-  { phase: 'greeting_response', pattern: 'not feeling', tutor_reply: "I hear you. You know what though? You opened the app — part of you wants to learn today. Let's just do 10 minutes. If you still don't feel it after that, we stop. Fair?", quick_replies: ['Okay, 10 minutes', 'Fine, you win'], proceed: false },
-  { phase: 'greeting_response', pattern: 'exam tomorrow', tutor_reply: "Ooh, exam tomorrow! Okay we need to focus. Tell me the subject and let's do a quick targeted revision session right now — no time to waste!", quick_replies: ['Mathematics', 'Physics', 'Chemistry', 'Add Maths'], proceed: false },
-  { phase: 'greeting_response', pattern: 'just start', tutor_reply: "Ha! I like your style — straight to business. Let's go!", quick_replies: [], proceed: true },
-  { phase: 'greeting_response', pattern: 'lets go', tutor_reply: "That's the spirit! Let's do this!", quick_replies: [], proceed: true },
-  { phase: 'greeting_response', pattern: 'skip', tutor_reply: "No worries, jumping right in!", quick_replies: [], proceed: true },
+  { phase: 'greeting_response', pattern: 'great ready', tutor_reply: "Good to hear. Let's get started — what are we working on today?", quick_replies: ['New lesson', 'Revision', 'Quiz'], proceed: false },
+  { phase: 'greeting_response', pattern: 'good thanks', tutor_reply: "Glad you're here. Shall we pick up where we left off, or start something new?", quick_replies: ['Continue last topic', 'Something new'], proceed: false },
+  { phase: 'greeting_response', pattern: 'tired but here', tutor_reply: "That's okay — showing up is already half the effort. We'll go at your pace today.", quick_replies: ['Okay, let\'s try', 'Just a short session'], proceed: false },
+  { phase: 'greeting_response', pattern: 'not feeling', tutor_reply: "Understood. You opened the app though, so part of you wants to learn. How about just 10 minutes?", quick_replies: ['Okay, 10 minutes', 'Fine, let\'s try'], proceed: false },
+  { phase: 'greeting_response', pattern: 'exam tomorrow', tutor_reply: "Exam tomorrow — alright, let's focus. Which subject do you need to revise right now?", quick_replies: ['Mathematics', 'Physics', 'Chemistry', 'Add Maths'], proceed: false },
+  { phase: 'greeting_response', pattern: 'just start', tutor_reply: "Straight to it — I like that. Let's go.", quick_replies: [], proceed: true },
+  { phase: 'greeting_response', pattern: 'lets go', tutor_reply: "Ready when you are.", quick_replies: [], proceed: true },
+  { phase: 'greeting_response', pattern: 'skip', tutor_reply: "No problem, jumping right in.", quick_replies: [], proceed: true },
 
-  // Phase: banter_response  
-  { phase: 'banter_response', pattern: 'yes ready', tutor_reply: "Perfect! Your lessons are all set. Let's make this session productive!", quick_replies: [], proceed: true },
-  { phase: 'banter_response', pattern: 'okay fine', tutor_reply: "That's what I like to hear! Small steps every day — that's how SPM gets conquered.", quick_replies: [], proceed: true },
-  { phase: 'banter_response', pattern: 'not today', tutor_reply: "Come on, just open one lesson. Five minutes — if you still don't feel it after that, I'll let you go. Promise!", quick_replies: ['Fine, 5 minutes', 'Okay deal'], proceed: false },
-  { phase: 'banter_response', pattern: 'give me minute', tutor_reply: "Of course! Take your time. Whenever you're ready, just say the word.", quick_replies: ['Ready now!', 'Okay let\'s go'], proceed: false },
-  { phase: 'banter_response', pattern: 'surprise me', tutor_reply: "Ooh I love the adventurous spirit! Let's go with something challenging today — ready to push your limits?", quick_replies: ['Let\'s do it!', 'Okay!'], proceed: false },
+  // Phase: banter_response
+  { phase: 'banter_response', pattern: 'yes ready', tutor_reply: "Your lessons are ready. Let's make this session count.", quick_replies: [], proceed: true },
+  { phase: 'banter_response', pattern: 'okay fine', tutor_reply: "Small steps every day — that's how SPM gets done.", quick_replies: [], proceed: true },
+  { phase: 'banter_response', pattern: 'not today', tutor_reply: "Just five minutes. If you still don't feel it after that, we can stop.", quick_replies: ['Fine, 5 minutes', 'Okay, deal'], proceed: false },
+  { phase: 'banter_response', pattern: 'give me minute', tutor_reply: "Take your time. Let me know when you're ready.", quick_replies: ['Ready now', 'Okay let\'s go'], proceed: false },
+  { phase: 'banter_response', pattern: 'surprise me', tutor_reply: "Alright — let's try something a bit challenging today. Ready?", quick_replies: ['Yes, let\'s do it', 'Okay'], proceed: false },
 ];
 
 async function seedCacheIfEmpty() {
@@ -82,22 +82,33 @@ async function findCachedResponse(studentInput, phase) {
 async function generateAndCache(studentInput, phase, studentName, lastTopic, conversationHistory) {
   const firstName = studentName.split(' ')[0];
 
-  const systemPrompt = `You are a warm, friendly Malaysian SPM tutor having a brief casual conversation with a student named ${firstName} before their study session. 
+  const systemPrompt = `You are a warm, professional Malaysian SPM tutor greeting a student named ${firstName} before their study session.
 
 Your personality:
-- Warm and encouraging, like a favourite teacher
-- Uses light humour occasionally  
-- Never gives up on a student
-- Speaks naturally, not formally
-- Knows SPM subjects: Mathematics, Add Maths, Physics, Chemistry, Biology, Bahasa Melayu, English, Sejarah
+- Warm and encouraging, like a favourite teacher or older sibling
+- Calm and clear — never try-hard or over-excited
+- Speaks in clean, natural English or Bahasa Malaysia only
+- Never uses slang, youth slang, or informal filler words
+
+BANNED WORDS — never use any of these under any circumstances:
+syiok, syok, ok best, best gila, gila best, power gila, mantap gila, weh, bro, sis, bestie, fam, lit, slay, vibe, vibing, no cap, lowkey, highkey, bussin, chilling, poggers, goated, based, W, L, ngl, imo, tbh, fr, rn, gonna, wanna, kinda, sorta, ya, yall, lemme, gotta, ain't
+
+Tone rules:
+- Encouraging but composed. One calm sentence, not three exclamation marks.
+- If student is tired or struggling — empathetic, not performatively peppy.
+- Never say things like "Love that energy!" or "Ooh I love the adventurous spirit!"
+
+Language:
+- Use proper English or proper Bahasa Malaysia (not mixed slang)
+- Allowed BM casual: lah, kan, okay, faham — nothing else
 
 Current phase: ${phase}
 Last topic studied: ${lastTopic || 'none yet'}
 
 Rules:
-- Keep response to 1-3 sentences MAX
-- End with either a question or encouragement to start
-- If student wants to skip small talk, warmly accept and proceed
+- Keep response to 1-2 sentences MAX
+- End with a calm question or simple encouragement to start
+- If student wants to skip small talk, accept immediately and proceed
 - Respond in JSON only: { "reply": "...", "quick_replies": ["option1", "option2"], "proceed": false }
 - "proceed": true only if conversation should end and student should go to home screen`;
 
@@ -154,7 +165,7 @@ router.post('/respond', async (req, res) => {
     const skipWords = ['just start', 'start now', 'lets go', "let's go", 'skip', 'begin', 'just begin'];
     if (skipWords.some(w => lower.includes(w))) {
       return res.json({
-        reply: "No worries — straight to business! That's the spirit. Let's go!",
+        reply: "No problem. Let's get started.",
         quick_replies: [],
         proceed: true,
         source: 'hardcoded',
