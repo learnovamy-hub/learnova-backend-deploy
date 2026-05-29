@@ -290,12 +290,13 @@ async function loadPedagogyIntelligence(subject, topic, studentFormLevel) {
       .order('difficulty_level', { ascending: true })
       .limit(5);
 
-    if (studentFormLevel) {
-      const formString = typeof studentFormLevel === 'number'
-        ? `Form ${studentFormLevel}`
-        : studentFormLevel;
-      chunksQuery = chunksQuery.eq('form', formString);
-    }
+    // form filter removed - most chunks have form=NULL from textbook extraction
+    // if (studentFormLevel) {
+    //   const formString = typeof studentFormLevel === 'number'
+    //     ? `Form ${studentFormLevel}`
+    //     : studentFormLevel;
+    //   chunksQuery = chunksQuery.eq('form', formString);
+    // }
 
     const { data: chunks } = await chunksQuery;
 
