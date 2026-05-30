@@ -158,30 +158,68 @@ Jangan mendedahkan bahawa kamu adalah model AI lain. Kamu adalah Learnova AI Tut
 
 // DeepSeek client (phase 3 - cheaper than Claude for standard responses)
 async function callDeepSeek(system, userMessage, maxTokens = 300) {
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userMessage }
-      ]
-    })
-  });
-  const data = await response.json();
-  console.log('DeepSeek response status:', response.status);
-  if (!response.ok) {
-    console.error('DeepSeek error:', JSON.stringify(data));
-    return null;
-  }
-  const result = data.choices?.[0]?.message?.content || null;
-  console.log('DeepSeek result:', result ? result.substring(0, 50) : 'NULL');
-  return result;
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userMessage }
+        ]
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) { console.error('DeepSeek error:', JSON.stringify(data)); return null; }
+    return data.choices?.[0]?.message?.content || null;
+  } catch (e) { console.error('DeepSeek error:', e.message); return null; }
+}
+
+// ── Off-topic and emotional pattern detectors ──────────────────────────────
+const OFF_TOPIC_PATTERNS = [
+  /\b(cuaca|weather|movie|filem|game|permainan|kereta|football|bola sepak|tiktok|instagram)\b/i,
+  /\b(boring|bosan|tired|penat|mengantuk|malas|lazy|stressed|tension)\b/i,
+  /^(haha|lol|hehe|ok|okay|fine|whatever|k|kk|noted)\s*[!.]?$/i,
+  /\b(lapar|hungry|makan|lunch|dinner|breakfast)\b/i,
+  /\b(boyfriend|girlfriend|crush|dating|couple)\b/i,
+];
+const EMOTIONAL_PATTERNS = [
+  /\b(tak faham|don't understand|confused|blur|lost|susah|difficult|hard)\b/i,
+  /\b(give up|menyerah|tak boleh|cannot|impossible)\b/i,
+  /\b(stress|anxious|nervous|takut|scared|worried|bimbang)\b/i,
+  /\b(tired|penat|exhausted|sleepy|mengantuk)\b/i,
+];
+function detectOffTopic(message) {
+  if (!message || message === 'start') return false;
+  return OFF_TOPIC_PATTERNS.some(p => p.test(message));
+}
+function detectEmotional(message) {
+  if (!message || message === 'start') return false;
+  return EMOTIONAL_PATTERNS.some(p => p.test(message));
+}
+
+async function handleOffTopic(subject, topic, message) {
+  const system = `You are Nova, a friendly Malaysian tutor.
+A student sent an off-topic message during a ${subject} lesson on "${topic}".
+Respond warmly in Bahasa Malaysia (2 sentences max):
+1. Acknowledge briefly with humour if appropriate
+2. Redirect back to the lesson with a question
+NEVER lecture. NEVER ignore. Always end with one question about the topic.`;
+  return await callDeepSeek(system, message, 150);
+}
+async function handleEmotional(subject, topic, message) {
+  const system = `You are Nova, a warm and encouraging Malaysian tutor.
+A student is showing signs of stress/confusion during ${subject} - "${topic}".
+Respond in Bahasa Malaysia (2-3 sentences):
+1. Validate their feeling in ONE sentence - make them feel understood
+2. Encourage them specifically - remind them they can do this
+3. Offer a simpler entry point back to the topic`;
+  return await callDeepSeek(system, message, 200);
 }
 
 // â"€â"€ HARDCODED PEDAGOGY RULES â"€â"€ applied to every system prompt, always â"€â"€â"€â"€â"€â"€
@@ -1064,6 +1102,35 @@ router.post('/session', async (req, res) => {
       });
     }
 
+    // ── OFF-TOPIC HANDLER (DeepSeek, not Claude) ──────────────────────────────
+    if (message !== 'start' && detectOffTopic(message)) {
+      console.log('[Router] Off-topic detected, using DeepSeek redirect');
+      const redirect = await handleOffTopic(subject, topic, message);
+      if (redirect) {
+        return res.json({
+          reply: redirect, phase: phase, segment: segment,
+          isCheckIn: false, activeQuestion: null, topicSwitchSuggested: false,
+          standardCode: currentStandard?.code || null, standardDesc: currentStandard?.description || null,
+          standardsProgress: standardsProgress,
+          suggestedResponses: ['Okay, jom sambung!', 'Saya ada soalan pasal topik ni...', 'Boleh terangkan semula?'],
+        });
+      }
+    }
+    // ── EMOTIONAL SUPPORT HANDLER (DeepSeek, not Claude) ──────────────────────
+    if (message !== 'start' && detectEmotional(message)) {
+      console.log('[Router] Emotional signal detected, using DeepSeek support');
+      const support = await handleEmotional(subject, topic, message);
+      if (support) {
+        return res.json({
+          reply: support, phase: phase, segment: segment,
+          isCheckIn: false, activeQuestion: null, topicSwitchSuggested: false,
+          standardCode: currentStandard?.code || null, standardDesc: currentStandard?.description || null,
+          standardsProgress: standardsProgress,
+          suggestedResponses: ['Okay, saya cuba lagi!', 'Boleh bagi contoh yang lebih mudah?', 'Terangkan dari awal please'],
+        });
+      }
+    }
+
     // â"€â"€ MULTILINGUAL BRIDGE (Tamil/Mandarin native language support) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     const bridgeLang = detectBridgeLang(correctedMsg, language);
     if (bridgeLang && topic) {
@@ -1094,7 +1161,7 @@ router.post('/session', async (req, res) => {
 
       if (isEnrichment) {
         const sessionId = req.body.session_id || '';
-        const dsCount = sessionId ? await getDeepSeekCount(sessionId) : DEEPSEEK_MAX_PER_SESSION;
+        const dsCount = sessionId ? await getDeepSeekCount(sessionId) : 0;
 
         if (dsCount < DEEPSEEK_MAX_PER_SESSION) {
           console.log('[Router] DeepSeek enrichment route:', classification.type);
