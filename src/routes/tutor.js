@@ -158,8 +158,6 @@ Jangan mendedahkan bahawa kamu adalah model AI lain. Kamu adalah Learnova AI Tut
 
 // DeepSeek client (phase 3 - cheaper than Claude for standard responses)
 async function callDeepSeek(system, userMessage, maxTokens = 300) {
-  // Temporarily disabled - no credits
-  return null;
   const response = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
@@ -1322,7 +1320,17 @@ router.post('/session', async (req, res) => {
 
   } catch (err) {
     console.error('Tutor error:', err);
-    res.status(500).json({ error: err.message });
+    res.json({
+      reply: 'Maaf, ada masalah teknikal sebentar. Cuba hantar mesej sekali lagi.',
+      phase: req.body.phase || 'intro',
+      segment: req.body.segment || 0,
+      isCheckIn: false,
+      activeQuestion: null,
+      topicSwitchSuggested: false,
+      suggestedResponses: ['Cuba lagi', 'Pilih topik lain'],
+      standardCode: null, standardDesc: null, standardsProgress: null,
+      source: 'error',
+    });
   }
 });
 
@@ -1331,14 +1339,29 @@ router.post('/session', async (req, res) => {
 router.get('/topics', async (req, res) => {
   try {
     const { subject = 'Mathematics' } = req.query;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('lessons')
       .select('id, title, topic, form_level, learning_objectives')
       .eq('subject', subject)
-      .eq('status', 'published')
+      .in('status', ['published', 'active'])
       .order('chapter_number', { ascending: true });
-    if (error) throw error;
-    res.json(data || []);
+
+    if (data && data.length > 0) return res.json(data);
+
+    // Fallback: use pre-generated content index (populated by pregen scripts)
+    const { data: pg } = await supabase
+      .from('pregen_status')
+      .select('topic')
+      .eq('subject', subject)
+      .eq('status', 'complete')
+      .gt('questions_generated', 0)
+      .order('topic');
+
+    if (pg && pg.length > 0) {
+      return res.json(pg.map(p => ({ id: null, title: p.topic, topic: p.topic, form_level: null, learning_objectives: null })));
+    }
+
+    res.json([]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
