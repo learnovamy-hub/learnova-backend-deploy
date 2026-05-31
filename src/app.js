@@ -62,7 +62,7 @@ app.use((req, res, next) => {
 // ============================================================================
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '3.0', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // ============================================================================
